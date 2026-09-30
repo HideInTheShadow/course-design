@@ -1,0 +1,22 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 16,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "mingw-debug",
+            "displayName": "Qt 6.11.2 + MinGW 13.1 (Debug)",
+            "description": "固定使用 Qt 自带的 MinGW 工具链，避免与其他 GCC 混用导致 ABI 冲突",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_COMPILER": "D:/Qt/Tools/mingw1310_64/bin/g++.exe",
+                "CMAKE_PREFIX_PATH": "D:/Qt/6.11.2/mingw_64"
+            }
+        }
+    ]
+}
