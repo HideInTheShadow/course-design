@@ -12,12 +12,18 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
+# 核心层：不依赖 Qt，可脱离 GUI 单独编译与测试
+add_library(labcore INTERFACE)
+target_include_directories(labcore INTERFACE src)
+
+# GUI 层
 qt_add_executable(labapp
     src/gui/main.cpp
     src/gui/MainWindow.cpp
     src/gui/MainWindow.h
 )
+target_link_libraries(labapp PRIVATE labcore Qt6::Widgets)
 
-target_include_directories(labapp PRIVATE src)
-
-target_link_libraries(labapp PRIVATE Qt6::Widgets)
+# 测试：仅依赖核心层
+add_executable(test_model tests/test_model.cpp)
+target_link_libraries(test_model PRIVATE labcore)
