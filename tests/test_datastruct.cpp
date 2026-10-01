@@ -3,6 +3,8 @@
 #include <string>
 
 #include "datastruct/HashTable.h"
+#include "datastruct/LinkedList.h"
+#include "model/BorrowRecord.h"
 #include "model/Device.h"
 
 // 测试依赖 assert，必须使用 Debug 构建（Release 下 NDEBUG 会禁用检查）
@@ -144,6 +146,125 @@ void testHashTableWithModelObjects() {
     assert(devices.size() == 1);
 }
 
+void testLinkedListPush() {
+    LinkedList<int> list;
+
+    assert(list.empty());
+    assert(list.size() == 0);
+
+    for (int i = 1; i <= 5; ++i) {
+        list.pushBack(i);
+    }
+    assert(list.size() == 5);
+
+    // pushBack 保持插入顺序
+    int expectedBack[] = {1, 2, 3, 4, 5};
+    int index = 0;
+    list.forEach([&expectedBack, &index](const int &value) {
+        assert(value == expectedBack[index]);
+        ++index;
+    });
+    assert(index == 5);
+
+    // pushFront 逆序
+    LinkedList<int> front;
+    for (int i = 1; i <= 5; ++i) {
+        front.pushFront(i);
+    }
+    int expectedFront[] = {5, 4, 3, 2, 1};
+    index = 0;
+    front.forEach([&expectedFront, &index](const int &value) {
+        assert(value == expectedFront[index]);
+        ++index;
+    });
+    assert(index == 5);
+}
+
+void testLinkedListEmptyEdge() {
+    LinkedList<int> list;
+
+    assert(!list.removeIf([](const int &value) { return value == 1; }));
+    assert(list.size() == 0);
+
+    int visited = 0;
+    list.forEach([&visited](const int &value) { ++visited; });
+    assert(visited == 0);
+
+    list.clear();
+    assert(list.empty());
+}
+
+void testLinkedListRemove() {
+    LinkedList<int> list;
+    for (int i = 1; i <= 5; ++i) {
+        list.pushBack(i);
+    }
+
+    // 删除中间节点
+    assert(list.removeIf([](const int &value) { return value == 3; }));
+    assert(list.size() == 4);
+    assert(!list.removeIf([](const int &value) { return value == 3; }));
+
+    // 删除头节点
+    assert(list.removeIf([](const int &value) { return value == 1; }));
+    assert(list.size() == 3);
+
+    // 删除尾节点后继续 pushBack，验证 tail 指针已正确回退
+    assert(list.removeIf([](const int &value) { return value == 5; }));
+    assert(list.size() == 2);
+
+    list.pushBack(6);
+    int expected[] = {2, 4, 6};
+    int index = 0;
+    list.forEach([&expected, &index](const int &value) {
+        assert(value == expected[index]);
+        ++index;
+    });
+    assert(index == 3);
+
+    // 逐个删空
+    assert(list.removeIf([](const int &value) { return value == 2; }));
+    assert(list.removeIf([](const int &value) { return value == 4; }));
+    assert(list.removeIf([](const int &value) { return value == 6; }));
+    assert(list.empty());
+    assert(list.size() == 0);
+}
+
+void testLinkedListClear() {
+    LinkedList<int> list;
+    for (int i = 0; i < 100; ++i) {
+        list.pushBack(i);
+    }
+    assert(list.size() == 100);
+
+    list.clear();
+    assert(list.empty());
+    assert(list.size() == 0);
+
+    // 清空后可复用
+    list.pushBack(42);
+    assert(list.size() == 1);
+}
+
+void testLinkedListWithBorrowRecords() {
+    LinkedList<BorrowRecord> history;
+    history.pushBack(BorrowRecord(1, 101, 1, 600));
+    history.pushBack(BorrowRecord(2, 101, 2, 700));
+    history.pushBack(BorrowRecord(3, 102, 1, 800));
+
+    int device101Count = 0;
+    history.forEach([&device101Count](const BorrowRecord &record) {
+        if (record.getDeviceId() == 101) ++device101Count;
+    });
+    assert(device101Count == 2);
+
+    // 移除一条未归还的记录
+    assert(history.removeIf([](const BorrowRecord &record) {
+        return !record.isReturned();
+    }));
+    assert(history.size() == 2);
+}
+
 int main() {
     testHashTableBasic();
     testHashTableDuplicateKey();
@@ -154,6 +275,12 @@ int main() {
     testHashTableForEach();
     testHashTableWithModelObjects();
 
-    std::cout << "test_datastruct (HashTable): all passed" << std::endl;
+    testLinkedListPush();
+    testLinkedListEmptyEdge();
+    testLinkedListRemove();
+    testLinkedListClear();
+    testLinkedListWithBorrowRecords();
+
+    std::cout << "test_datastruct: all passed" << std::endl;
     return 0;
 }
