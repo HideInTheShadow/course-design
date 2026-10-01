@@ -27,3 +27,6 @@ target_link_libraries(labapp PRIVATE labcore Qt6::Widgets)
 # 测试：仅依赖核心层
 add_executable(test_model tests/test_model.cpp)
 target_link_libraries(test_model PRIVATE labcore)
+
+add_executable(test_datastruct tests/test_datastruct.cpp)
+target_link_libraries(test_datastruct PRIVATE labcore)
