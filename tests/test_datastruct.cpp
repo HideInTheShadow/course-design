@@ -6,6 +6,7 @@
 #include "datastruct/LinkedList.h"
 #include "datastruct/Queue.h"
 #include "datastruct/Stack.h"
+#include "datastruct/Tree.h"
 #include "model/BorrowRecord.h"
 #include "model/Device.h"
 #include "model/Reservation.h"
@@ -435,6 +436,177 @@ void testStackWithActionRecords() {
     assert(actions.size() == 2);
 }
 
+void testTreeAddAndFind() {
+    Tree<std::string> tree;
+    assert(tree.empty());
+    assert(tree.size() == 0);
+
+    int root = tree.addRoot("电子测量");
+    int scope = tree.addChild(root, "示波器");
+    int meter = tree.addChild(root, "万用表");
+    int analog = tree.addChild(scope, "模拟示波器");
+    assert(tree.size() == 4);
+
+    // 父链与兄弟链
+    assert(tree.parentOf(root) == -1);
+    assert(tree.firstChildOf(root) == scope);
+    assert(tree.nextSiblingOf(scope) == meter);
+    assert(tree.nextSiblingOf(meter) == -1);
+    assert(tree.parentOf(analog) == scope);
+    assert(tree.firstChildOf(analog) == -1);
+
+    // 非法父下标
+    assert(tree.addChild(-1, "非法") == -1);
+    assert(tree.addChild(99, "非法") == -1);
+    assert(tree.size() == 4);
+
+    // 查找
+    assert(tree.find("示波器") == scope);
+    assert(tree.find("不存在") == -1);
+    assert(tree.findChild(root, "万用表") == meter);
+    assert(tree.findChild(root, "模拟示波器") == -1);  // 不是直接孩子
+    assert(tree.findChild(scope, "模拟示波器") == analog);
+
+    std::string value;
+    assert(tree.valueAt(analog, value));
+    assert(value == "模拟示波器");
+    assert(!tree.valueAt(99, value));
+}
+
+void testTreeDuplicateNameAllowed() {
+    Tree<std::string> tree;
+    int rootA = tree.addRoot("电子测量");
+    int rootB = tree.addRoot("机械加工");
+    int childA = tree.addChild(rootA, "传感器");
+    int childB = tree.addChild(rootB, "传感器");
+
+    // 同名节点可以存在于不同父节点下，全局唯一性不在此处强制
+    assert(tree.find("传感器") == childA);
+    assert(tree.findChild(rootA, "传感器") == childA);
+    assert(tree.findChild(rootB, "传感器") == childB);
+}
+
+void testTreeTraverse() {
+    Tree<std::string> tree;
+    int rootA = tree.addRoot("A");
+    int nodeB = tree.addChild(rootA, "B");
+    tree.addChild(rootA, "C");
+    tree.addChild(nodeB, "D");
+    tree.addRoot("E");
+
+    std::string order[5];
+    int visited = 0;
+    tree.traversePreOrder([&order, &visited, &tree](const std::string &value, int nodeId) {
+        assert(nodeId >= 0 && nodeId < tree.size());
+        order[visited++] = value;
+    });
+
+    // 前序：A B D C E
+    assert(visited == 5);
+    assert(order[0] == "A");
+    assert(order[1] == "B");
+    assert(order[2] == "D");
+    assert(order[3] == "C");
+    assert(order[4] == "E");
+}
+
+void testTreeGrow() {
+    // 初始容量取 4，插入 100 个节点触发多次 2 倍扩容
+    Tree<std::string> tree(4);
+    int root = tree.addRoot("root");
+    for (int i = 0; i < 100; ++i) {
+        tree.addChild(root, "child" + std::to_string(i));
+    }
+    assert(tree.size() == 101);
+
+    // 扩容搬迁后下标关系仍在，孩子链顺序保持添加顺序
+    int child = tree.firstChildOf(root);
+    for (int i = 0; i < 100; ++i) {
+        std::string value;
+        assert(tree.valueAt(child, value));
+        assert(value == "child" + std::to_string(i));
+        child = tree.nextSiblingOf(child);
+    }
+    assert(child == -1);
+}
+
+void testTreeRemoveLeaf() {
+    Tree<std::string> tree;
+    int root = tree.addRoot("root");
+    tree.addChild(root, "A");
+    int nodeB = tree.addChild(root, "B");
+    tree.addChild(root, "C");
+
+    // 删除中间的孩子，验证前驱指针重连
+    assert(tree.remove(nodeB));
+
+    std::string order[3];
+    int visited = 0;
+    tree.traversePreOrder([&order, &visited](const std::string &value, int) {
+        order[visited++] = value;
+    });
+    assert(visited == 3);
+    assert(order[0] == "root");
+    assert(order[1] == "A");
+    assert(order[2] == "C");
+
+    assert(tree.find("B") == -1);
+    assert(!tree.remove(-1));
+    assert(!tree.remove(99));
+}
+
+void testTreeRemoveSubtree() {
+    Tree<std::string> tree;
+    int root = tree.addRoot("root");
+    int nodeA = tree.addChild(root, "A");
+    int nodeA1 = tree.addChild(nodeA, "A1");
+    tree.addChild(nodeA1, "A1x");
+    tree.addChild(root, "B");
+    assert(tree.size() == 5);
+
+    // 删除 A 及其整棵子树
+    assert(tree.remove(nodeA));
+    assert(tree.size() == 2);
+    assert(tree.find("A") == -1);
+    assert(tree.find("A1") == -1);
+    assert(tree.find("A1x") == -1);
+
+    std::string order[2];
+    int visited = 0;
+    tree.traversePreOrder([&order, &visited](const std::string &value, int) {
+        order[visited++] = value;
+    });
+    assert(visited == 2);
+    assert(order[0] == "root");
+    assert(order[1] == "B");
+
+    // 删除后下标已重新编号：root 为 0，B 为 1
+    assert(tree.parentOf(0) == -1);
+    assert(tree.firstChildOf(0) == 1);
+    assert(tree.parentOf(1) == 0);
+
+    // 删除根，整棵树清空
+    assert(tree.remove(0));
+    assert(tree.empty());
+    assert(tree.size() == 0);
+}
+
+void testTreeClear() {
+    Tree<std::string> tree;
+    int root = tree.addRoot("root");
+    tree.addChild(root, "A");
+    assert(tree.size() == 2);
+
+    tree.clear();
+    assert(tree.empty());
+    assert(tree.size() == 0);
+
+    // 清空后可复用
+    int newRoot = tree.addRoot("new");
+    assert(newRoot == 0);
+    assert(tree.size() == 1);
+}
+
 int main() {
     testHashTableBasic();
     testHashTableDuplicateKey();
@@ -460,6 +632,14 @@ int main() {
     testStackGrow();
     testStackClear();
     testStackWithActionRecords();
+
+    testTreeAddAndFind();
+    testTreeDuplicateNameAllowed();
+    testTreeTraverse();
+    testTreeGrow();
+    testTreeRemoveLeaf();
+    testTreeRemoveSubtree();
+    testTreeClear();
 
     std::cout << "test_datastruct: all passed" << std::endl;
     return 0;
