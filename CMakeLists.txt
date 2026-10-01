@@ -30,3 +30,6 @@ target_link_libraries(test_model PRIVATE labcore)
 
 add_executable(test_datastruct tests/test_datastruct.cpp)
 target_link_libraries(test_datastruct PRIVATE labcore)
+
+add_executable(test_service tests/test_service.cpp)
+target_link_libraries(test_service PRIVATE labcore)
