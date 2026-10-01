@@ -43,6 +43,15 @@ private:
         deviceManager.setStatus(deviceId, hasActive ? DeviceStatus::Reserved : DeviceStatus::Idle);
     }
 
+    // 只有正常可用的设备可以接受新预约
+    OpResult checkBookable(int deviceId) const {
+        Device device(0, "", "", "");  // 仅作接收容器
+        if (!deviceManager.findDevice(deviceId, device)) return OpResult::NotFound;
+        if (device.getStatus() == DeviceStatus::Repair) return OpResult::InvalidState;
+
+        return OpResult::Ok;
+    }
+
 public:
     LabService() : nextBorrowRecordId(1) {}
 
@@ -107,6 +116,34 @@ public:
         return userManager.removeUser(userId);
     }
 
+    // 管理员标记设备维修：已借出或还有未取消预约的设备不能标记
+    OpResult markDeviceRepair(int deviceId) {
+        Device device(0, "", "", "");  // 仅作接收容器
+        if (!deviceManager.findDevice(deviceId, device)) return OpResult::NotFound;
+        if (device.getStatus() == DeviceStatus::Repair) return OpResult::InvalidState;
+        if (device.getStatus() == DeviceStatus::Borrowed) return OpResult::InvalidState;
+
+        bool busy = false;
+        reservationManager.forEachReservationOfDevice(deviceId,
+                                                      [&busy](const Reservation &reservation) {
+            if (reservation.getStatus() != ReservationStatus::Cancelled) busy = true;
+        });
+        if (busy) return OpResult::InvalidState;
+
+        return deviceManager.setStatus(deviceId, DeviceStatus::Repair);
+    }
+
+    // 管理员结束维修：设备状态按是否还有有效预约重新计算
+    OpResult clearDeviceRepair(int deviceId) {
+        Device device(0, "", "", "");  // 仅作接收容器
+        if (!deviceManager.findDevice(deviceId, device)) return OpResult::NotFound;
+        if (device.getStatus() != DeviceStatus::Repair) return OpResult::InvalidState;
+
+        deviceManager.setStatus(deviceId, DeviceStatus::Idle);
+        refreshDeviceStatus(deviceId);
+        return OpResult::Ok;
+    }
+
     // 设备还有有效预约或等待任务时不允许删除
     OpResult removeDevice(int deviceId) {
         bool busy = false;
@@ -120,13 +157,17 @@ public:
     }
 
     // 提交预约：用户与设备必须存在，时间冲突时返回 TimeConflict，由调用方决定是否排队
+    // 维修中的设备不能预约，避免把时段承诺给一台还不确定的设备
     OpResult reserve(int userId, int deviceId, long long startTime, long long endTime,
                      int &reservationId) {
         if (!userManager.contains(userId)) return OpResult::NotFound;
         if (!deviceManager.contains(deviceId)) return OpResult::NotFound;
 
-        OpResult result = reservationManager.submitReservation(userId, deviceId, startTime,
-                                                               endTime, reservationId);
+        OpResult result = checkBookable(deviceId);
+        if (result != OpResult::Ok) return result;
+
+        result = reservationManager.submitReservation(userId, deviceId, startTime,
+                                                      endTime, reservationId);
         if (result == OpResult::Ok) refreshDeviceStatus(deviceId);
         return result;
     }
@@ -137,7 +178,9 @@ public:
         if (!userManager.contains(userId)) return OpResult::NotFound;
         if (!deviceManager.contains(deviceId)) return OpResult::NotFound;
 
-        OpResult result = OpResult::Ok;
+        OpResult result = checkBookable(deviceId);
+        if (result != OpResult::Ok) return result;
+
         if (reservationManager.hasConflict(deviceId, startTime, endTime)) {
             result = reservationManager.submitWaitingReservation(userId, deviceId, startTime,
                                                                  endTime, reservationId);

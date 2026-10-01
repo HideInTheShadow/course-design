@@ -187,16 +187,21 @@ QWidget *AdminPage::buildDevicePanel() {
     QPushButton *addButton = new QPushButton("新增设备", panel);
     QPushButton *updateButton = new QPushButton("修改设备", panel);
     QPushButton *removeButton = new QPushButton("删除设备", panel);
+    QPushButton *repairButton = new QPushButton("标记维修", panel);
+    QPushButton *availableButton = new QPushButton("结束维修", panel);
     QPushButton *refreshButton = new QPushButton("刷新", panel);
 
     QHBoxLayout *buttons = new QHBoxLayout();
     buttons->addWidget(addButton);
     buttons->addWidget(updateButton);
     buttons->addWidget(removeButton);
+    buttons->addWidget(repairButton);
+    buttons->addWidget(availableButton);
     buttons->addWidget(refreshButton);
     buttons->addStretch();
 
-    deviceHint = new QLabel("新增设备前必须先建立分类；还有预约或已借出的设备不能删除", panel);
+    deviceHint = new QLabel("新增设备前必须先建立分类；还有预约或已借出的设备不能删除，"
+                            "也不能标记维修", panel);
 
     QVBoxLayout *layout = new QVBoxLayout(panel);
     layout->addWidget(deviceTable);
@@ -206,6 +211,8 @@ QWidget *AdminPage::buildDevicePanel() {
     connect(addButton, &QPushButton::clicked, this, &AdminPage::onAddDevice);
     connect(updateButton, &QPushButton::clicked, this, &AdminPage::onUpdateDevice);
     connect(removeButton, &QPushButton::clicked, this, &AdminPage::onRemoveDevice);
+    connect(repairButton, &QPushButton::clicked, this, &AdminPage::onMarkRepair);
+    connect(availableButton, &QPushButton::clicked, this, &AdminPage::onClearRepair);
     connect(refreshButton, &QPushButton::clicked, this, &AdminPage::reloadDevices);
     return panel;
 }
@@ -486,6 +493,46 @@ void AdminPage::onRemoveDevice() {
     }
     else {
         deviceHint->setText(QString("删除失败：%1").arg(resultText(result)));
+    }
+    reloadDevices();
+}
+
+void AdminPage::onMarkRepair() {
+    int deviceId = selectedDeviceId();
+    if (deviceId < 0) {
+        deviceHint->setText("请先选中一台设备");
+        return;
+    }
+
+    OpResult result = service.markDeviceRepair(deviceId);
+    if (result == OpResult::Ok) {
+        deviceHint->setText("已标记维修，维修中的设备不能接受新预约");
+    }
+    else if (result == OpResult::InvalidState) {
+        deviceHint->setText("标记失败：设备已借出、已在维修中或还有未取消的预约");
+    }
+    else {
+        deviceHint->setText(QString("标记失败：%1").arg(resultText(result)));
+    }
+    reloadDevices();
+}
+
+void AdminPage::onClearRepair() {
+    int deviceId = selectedDeviceId();
+    if (deviceId < 0) {
+        deviceHint->setText("请先选中一台设备");
+        return;
+    }
+
+    OpResult result = service.clearDeviceRepair(deviceId);
+    if (result == OpResult::Ok) {
+        deviceHint->setText("维修结束，设备状态已按剩余预约重新计算");
+    }
+    else if (result == OpResult::InvalidState) {
+        deviceHint->setText("该设备不在维修状态");
+    }
+    else {
+        deviceHint->setText(QString("操作失败：%1").arg(resultText(result)));
     }
     reloadDevices();
 }

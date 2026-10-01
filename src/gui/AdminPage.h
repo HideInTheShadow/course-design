@@ -43,6 +43,8 @@ private:
     void onAddDevice();
     void onUpdateDevice();
     void onRemoveDevice();
+    void onMarkRepair();
+    void onClearRepair();
 
     LabService &service;
 

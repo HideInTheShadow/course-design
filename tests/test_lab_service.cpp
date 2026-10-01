@@ -252,6 +252,60 @@ void testRemoveUserWithOpenBorrow() {
     assert(service.removeUser(userId) == OpResult::Ok);
 }
 
+void testRepairStatus() {
+    LabService service;
+    int userId = addUser(service, "张三");
+    int deviceId = addDevice(service, "示波器");
+
+    Device device(0, "", "", "");  // 仅作接收容器
+
+    // 有未取消预约时不能标记维修
+    int reservationId = 0;
+    assert(service.reserve(userId, deviceId, 600, 720, reservationId) == OpResult::Ok);
+    assert(service.markDeviceRepair(deviceId) == OpResult::InvalidState);
+
+    // 取消预约后可以标记，维修中的设备不再接受预约与排队
+    assert(service.cancelReservation(reservationId) == OpResult::Ok);
+    assert(service.markDeviceRepair(deviceId) == OpResult::Ok);
+    assert(service.devices().findDevice(deviceId, device));
+    assert(device.getStatus() == DeviceStatus::Repair);
+
+    int rejected = 0;
+    assert(service.reserve(userId, deviceId, 600, 720, rejected) == OpResult::InvalidState);
+    assert(service.waitReservation(userId, deviceId, 600, 720, rejected) == OpResult::InvalidState);
+
+    // 重复标记与对正常设备结束维修都不合法
+    assert(service.markDeviceRepair(deviceId) == OpResult::InvalidState);
+    assert(service.clearDeviceRepair(999) == OpResult::NotFound);
+
+    // 维修结束：没有有效预约则回到空闲，之后可以正常预约
+    assert(service.clearDeviceRepair(deviceId) == OpResult::Ok);
+    assert(service.devices().findDevice(deviceId, device));
+    assert(device.getStatus() == DeviceStatus::Idle);
+    assert(service.reserve(userId, deviceId, 600, 720, rejected) == OpResult::Ok);
+
+    // 已经有有效预约的设备同样不能标记维修
+    assert(service.markDeviceRepair(deviceId) == OpResult::InvalidState);
+    assert(service.cancelReservation(rejected) == OpResult::Ok);
+    assert(service.markDeviceRepair(deviceId) == OpResult::Ok);
+    assert(service.clearDeviceRepair(deviceId) == OpResult::Ok);
+    assert(service.devices().findDevice(deviceId, device));
+    assert(device.getStatus() == DeviceStatus::Idle);
+}
+
+void testBorrowRepairDevice() {
+    LabService service;
+    int userId = addUser(service, "张三");
+    int deviceId = addDevice(service, "示波器");
+
+    assert(service.markDeviceRepair(deviceId) == OpResult::Ok);
+
+    // 维修中的设备不能借用，也不能归还（没有借出记录）
+    int recordId = 0;
+    assert(service.borrowDevice(deviceId, userId, 650, recordId) == OpResult::InvalidState);
+    assert(service.returnDevice(deviceId, 700) == OpResult::InvalidState);
+}
+
 int main() {
     testReserveFlow();
     testWaitFlow();
@@ -260,6 +314,8 @@ int main() {
     testUndoCancel();
     testRemoveConstraints();
     testRemoveUserWithOpenBorrow();
+    testRepairStatus();
+    testBorrowRepairDevice();
 
     std::cout << "test_lab_service: all passed" << std::endl;
     return 0;
