@@ -21,6 +21,8 @@ qt_add_executable(labapp
     src/gui/main.cpp
     src/gui/MainWindow.cpp
     src/gui/MainWindow.h
+    src/gui/DevicePage.cpp
+    src/gui/DevicePage.h
 )
 target_link_libraries(labapp PRIVATE labcore Qt6::Widgets)
 
