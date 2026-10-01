@@ -58,12 +58,12 @@ public:
         return OpResult::Ok;
     }
 
-    // 设备的时段释放后按等待顺序处理：不再冲突的等待任务提升为有效预约
-    // fn 对每个被提升的预约调用一次，供上层同步设备状态
-    void promoteWaitingForDevice(int deviceId,
-                                 const std::function<void(const Reservation &)> &fn) {
+    // 设备的时段释放后按等待顺序处理：不再冲突的等待任务提升为有效预约，返回提升数量
+    int promoteWaitingForDevice(int deviceId) {
         // 只处理当前队列中的任务，本轮新排回队尾的不再重复检查
         int pending = waitingOrder.size();
+        int promotedCount = 0;
+
         for (int i = 0; i < pending; ++i) {
             int reservationId = 0;
             waitingOrder.front(reservationId);
@@ -79,13 +79,33 @@ public:
                                           reservation.getEndTime())) {
                 reservation.setStatus(ReservationStatus::Active);
                 reservations.update(reservationId, reservation);
-                fn(reservation);
+                ++promotedCount;
                 promoted = true;
             }
 
             // 提升成功的不再排队，其余保持原有先后次序
             if (!promoted) waitingOrder.push(reservationId);
         }
+        return promotedCount;
+    }
+
+    // 撤销取消：按取消前的状态恢复预约；恢复有效预约时若时段已被占用则拒绝
+    OpResult restoreReservation(int reservationId, ReservationStatus previousStatus) {
+        Reservation reservation(0, 0, 0, 0, 0);  // 仅作接收容器
+        if (!reservations.find(reservationId, reservation)) return OpResult::NotFound;
+        if (reservation.getStatus() != ReservationStatus::Cancelled) return OpResult::InvalidState;
+        if (previousStatus == ReservationStatus::Active
+            && conflictsWithExisting(reservation.getDeviceId(), reservation.getStartTime(),
+                                     reservation.getEndTime())) {
+            return OpResult::TimeConflict;
+        }
+
+        reservation.setStatus(previousStatus);
+        reservations.update(reservationId, reservation);
+
+        // 恢复的等待任务重新排到队尾，不打乱队列中其它任务的先后次序
+        if (previousStatus == ReservationStatus::Waiting) waitingOrder.push(reservationId);
+        return OpResult::Ok;
     }
 
     int waitingCount() const {
