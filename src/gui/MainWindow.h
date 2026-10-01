@@ -4,7 +4,10 @@
 #include <QMainWindow>
 
 class QTabWidget;
+class AdminPage;
+class BorrowPage;
 class DevicePage;
+class ReservationPage;
 class LabService;
 
 // 主窗口只负责组织各功能页面与切换刷新，不承担业务逻辑
@@ -17,6 +20,9 @@ public:
 private:
     QTabWidget *tabs;
     DevicePage *devicePage;
+    ReservationPage *reservationPage;
+    BorrowPage *borrowPage;
+    AdminPage *adminPage;
 };
 
 #endif

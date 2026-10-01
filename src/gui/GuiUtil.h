@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QString>
+#include <QTableWidget>
 
 #include "model/BorrowRecord.h"
 #include "model/Device.h"
@@ -70,4 +71,17 @@ inline QString borrowStatusText(BorrowStatus status) {
         return "已归还";
     }
     return "未知状态";
+}
+
+// 重填表格后按第一列的编号恢复选中行
+inline void selectRowById(QTableWidget *table, int id) {
+    if (id < 0) return;
+
+    for (int row = 0; row < table->rowCount(); ++row) {
+        QTableWidgetItem *item = table->item(row, 0);
+        if (item && item->text().toInt() == id) {
+            table->selectRow(row);
+            return;
+        }
+    }
 }

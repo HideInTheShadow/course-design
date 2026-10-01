@@ -164,10 +164,11 @@ void DevicePage::reloadDevices() {
     QTreeWidgetItem *current = categoryTree->currentItem();
     if (current) collectCategoryNames(current, categoryNames);
 
+    // 填充期间关闭排序，避免插入行时行号被重排打乱
+    deviceTable->setSortingEnabled(false);
     deviceTable->setRowCount(0);
-    int restoreRow = -1;
 
-    service.devices().forEachDevice([this, &categoryNames, previousDeviceId, &restoreRow](const Device &device) {
+    service.devices().forEachDevice([this, &categoryNames](const Device &device) {
         QString category = QString::fromStdString(device.getCategory());
         if (!categoryNames.isEmpty() && !categoryNames.contains(category)) return;
 
@@ -178,13 +179,10 @@ void DevicePage::reloadDevices() {
         deviceTable->setItem(row, 2, new QTableWidgetItem(category));
         deviceTable->setItem(row, 3, new QTableWidgetItem(QString::fromStdString(device.getLocation())));
         deviceTable->setItem(row, 4, new QTableWidgetItem(deviceStatusText(device.getStatus())));
-
-        if (device.getId() == previousDeviceId) restoreRow = row;
     });
 
-    if (restoreRow >= 0) {
-        deviceTable->selectRow(restoreRow);
-    }
+    deviceTable->setSortingEnabled(true);
+    selectRowById(deviceTable, previousDeviceId);
 }
 
 int DevicePage::selectedDeviceId() const {
