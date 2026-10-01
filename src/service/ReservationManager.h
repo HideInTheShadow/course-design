@@ -3,14 +3,17 @@
 #include <functional>
 
 #include "datastruct/HashTable.h"
+#include "datastruct/Queue.h"
 #include "model/Reservation.h"
 #include "service/OpResult.h"
 
-// 预约管理：编号到 Reservation 对象的哈希表
+// 预约管理：编号到 Reservation 对象的哈希表，另用队列保存等待任务的先后次序
+// 等待中的预约实体同样存放在哈希表里，队列只存编号，避免同一份数据两处保存
 // 用户与设备的合法存在性由上层协调者校验，这里只管预约自身的规则：时间合法性与同设备时间冲突
 class ReservationManager {
 private:
     HashTable<int, Reservation> reservations;
+    Queue<int> waitingOrder;  // 等待任务的预约编号，先进先出
     int nextId;
 
     // 同一设备上是否存在与 [startTime, endTime) 冲突的有效预约
@@ -40,6 +43,68 @@ public:
         newId = nextId++;
         reservations.insert(newId, Reservation(newId, userId, deviceId, startTime, endTime));
         return OpResult::Ok;
+    }
+
+    // 时间冲突时用户可以选择排队等待：建立等待中的预约并排到队尾
+    // 队列只在设备时段释放后由 promoteWaitingForDevice 处理
+    OpResult submitWaitingReservation(int userId, int deviceId, long long startTime,
+                                      long long endTime, int &newId) {
+        if (startTime < 0 || startTime >= endTime) return OpResult::InvalidInput;
+
+        newId = nextId++;
+        reservations.insert(newId, Reservation(newId, userId, deviceId, startTime, endTime,
+                                               ReservationStatus::Waiting));
+        waitingOrder.push(newId);
+        return OpResult::Ok;
+    }
+
+    // 设备的时段释放后按等待顺序处理：不再冲突的等待任务提升为有效预约
+    // fn 对每个被提升的预约调用一次，供上层同步设备状态
+    void promoteWaitingForDevice(int deviceId,
+                                 const std::function<void(const Reservation &)> &fn) {
+        // 只处理当前队列中的任务，本轮新排回队尾的不再重复检查
+        int pending = waitingOrder.size();
+        for (int i = 0; i < pending; ++i) {
+            int reservationId = 0;
+            waitingOrder.front(reservationId);
+            waitingOrder.pop();
+
+            Reservation reservation(0, 0, 0, 0, 0);  // 仅作接收容器
+            if (!reservations.find(reservationId, reservation)) continue;
+            if (reservation.getStatus() != ReservationStatus::Waiting) continue;  // 已被取消
+
+            bool promoted = false;
+            if (reservation.getDeviceId() == deviceId
+                && !conflictsWithExisting(deviceId, reservation.getStartTime(),
+                                          reservation.getEndTime())) {
+                reservation.setStatus(ReservationStatus::Active);
+                reservations.update(reservationId, reservation);
+                fn(reservation);
+                promoted = true;
+            }
+
+            // 提升成功的不再排队，其余保持原有先后次序
+            if (!promoted) waitingOrder.push(reservationId);
+        }
+    }
+
+    int waitingCount() const {
+        int count = 0;
+        reservations.forEach([&count](const int &, const Reservation &reservation) {
+            if (reservation.getStatus() == ReservationStatus::Waiting) ++count;
+        });
+        return count;
+    }
+
+    // 按排队先后输出等待任务；已被取消的预约跳过
+    void forEachWaiting(const std::function<void(const Reservation &)> &fn) const {
+        waitingOrder.forEach([this, &fn](const int &reservationId) {
+            Reservation reservation(0, 0, 0, 0, 0);  // 仅作接收容器
+            if (!reservations.find(reservationId, reservation)) return;
+            if (reservation.getStatus() != ReservationStatus::Waiting) return;
+
+            fn(reservation);
+        });
     }
 
     // 有效预约与等待中的预约都可以取消，重复取消返回 InvalidState

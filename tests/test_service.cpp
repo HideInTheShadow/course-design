@@ -402,6 +402,91 @@ void testForEachReservationOfDevice() {
     assert(total == 3);
 }
 
+void testWaitingQueue() {
+    ReservationManager manager;
+    int active = 0;
+    manager.submitReservation(1, 101, 600, 720, active);
+
+    int waiting = 0;
+    assert(manager.submitWaitingReservation(2, 101, 660, 780, waiting) == OpResult::Ok);
+    assert(manager.submitWaitingReservation(3, 101, -10, 780, waiting) == OpResult::InvalidInput);
+    assert(manager.waitingCount() == 1);
+
+    Reservation reservation(0, 0, 0, 0, 0);
+    assert(manager.findReservation(waiting, reservation));
+    assert(reservation.getStatus() == ReservationStatus::Waiting);
+
+    int visited = 0;
+    manager.forEachWaiting([&visited, waiting](const Reservation &item) {
+        ++visited;
+        assert(item.getId() == waiting);
+        assert(item.getStatus() == ReservationStatus::Waiting);
+    });
+    assert(visited == 1);
+
+    // 等待中的预约尚未占用时段，不参与冲突判断
+    int others = 0;
+    assert(manager.submitReservation(4, 101, 740, 800, others) == OpResult::Ok);
+}
+
+void testPromoteWaiting() {
+    ReservationManager manager;
+    int active = 0;
+    int firstWaiting = 0;
+    int secondWaiting = 0;
+    int otherDevice = 0;
+    manager.submitReservation(1, 101, 600, 720, active);
+    manager.submitWaitingReservation(2, 101, 620, 700, firstWaiting);
+    manager.submitWaitingReservation(3, 101, 640, 720, secondWaiting);
+    manager.submitWaitingReservation(4, 102, 600, 720, otherDevice);
+    assert(manager.waitingCount() == 3);
+
+    // 时段未释放时提升不了任何任务
+    int promotedCount = 0;
+    manager.promoteWaitingForDevice(101, [&promotedCount](const Reservation &) {
+        ++promotedCount;
+    });
+    assert(promotedCount == 0);
+    assert(manager.waitingCount() == 3);
+
+    // 取消占用时段的预约后，先到先得：队首的能提升，后面的仍与它冲突
+    assert(manager.cancelReservation(active) == OpResult::Ok);
+
+    int promoted = 0;
+    manager.promoteWaitingForDevice(101, [&promoted, firstWaiting](const Reservation &reservation) {
+        ++promoted;
+        assert(reservation.getStatus() == ReservationStatus::Active);
+        assert(reservation.getId() == firstWaiting);
+    });
+    assert(promoted == 1);
+    assert(manager.waitingCount() == 2);  // 设备 102 的等待任务不受影响
+
+    Reservation reservation(0, 0, 0, 0, 0);
+    assert(manager.findReservation(firstWaiting, reservation));
+    assert(reservation.getStatus() == ReservationStatus::Active);
+    assert(manager.findReservation(secondWaiting, reservation));
+    assert(reservation.getStatus() == ReservationStatus::Waiting);
+
+    // 等待任务取消后不再参与调度
+    assert(manager.cancelReservation(secondWaiting) == OpResult::Ok);
+    assert(manager.waitingCount() == 1);
+
+    promoted = 0;
+    manager.promoteWaitingForDevice(101, [&promoted](const Reservation &) {
+        ++promoted;
+    });
+    assert(promoted == 0);
+
+    // 另一个设备的时段释放时才轮到它
+    promoted = 0;
+    manager.promoteWaitingForDevice(102, [&promoted, otherDevice](const Reservation &reservation) {
+        ++promoted;
+        assert(reservation.getId() == otherDevice);
+    });
+    assert(promoted == 1);
+    assert(manager.waitingCount() == 0);
+}
+
 int main() {
     testAddUser();
     testFindUser();
@@ -422,6 +507,9 @@ int main() {
     testReservationConflict();
     testCancelReservation();
     testForEachReservationOfDevice();
+
+    testWaitingQueue();
+    testPromoteWaiting();
 
     std::cout << "test_service: all passed" << std::endl;
     return 0;
