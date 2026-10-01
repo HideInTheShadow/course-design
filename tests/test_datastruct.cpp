@@ -5,11 +5,18 @@
 #include "datastruct/HashTable.h"
 #include "datastruct/LinkedList.h"
 #include "datastruct/Queue.h"
+#include "datastruct/Stack.h"
 #include "model/BorrowRecord.h"
 #include "model/Device.h"
 #include "model/Reservation.h"
 
 // 测试依赖 assert，必须使用 Debug 构建（Release 下 NDEBUG 会禁用检查）
+
+// 撤销栈的元素类型：记录一次与预约相关的可撤销操作
+struct ActionRecord {
+    int type;  // 1 新建预约，2 取消预约
+    int reservationId;
+};
 
 void testHashTableBasic() {
     HashTable<int, std::string> table;
@@ -347,6 +354,87 @@ void testQueueWithReservations() {
     assert(waiting.size() == 2);
 }
 
+void testStackBasic() {
+    Stack<int> stack;
+
+    assert(stack.empty());
+    assert(stack.size() == 0);
+
+    int value = 0;
+    assert(!stack.top(value));
+    assert(!stack.pop());
+
+    for (int i = 1; i <= 5; ++i) {
+        stack.push(i);
+    }
+    assert(stack.size() == 5);
+
+    // 后进先出，top 只读不弹出
+    assert(stack.top(value) && value == 5);
+    assert(stack.size() == 5);
+
+    for (int i = 5; i >= 1; --i) {
+        assert(stack.top(value));
+        assert(value == i);
+        assert(stack.pop());
+    }
+    assert(stack.empty());
+    assert(!stack.pop());
+}
+
+void testStackGrow() {
+    // 初始容量取 4，插入 100 个元素触发多次 2 倍扩容
+    Stack<int> stack(4);
+    for (int i = 1; i <= 100; ++i) {
+        stack.push(i);
+    }
+    assert(stack.size() == 100);
+
+    // 扩容搬迁后顺序不丢，仍为后进先出
+    int value = 0;
+    for (int i = 100; i >= 1; --i) {
+        assert(stack.top(value));
+        assert(value == i);
+        assert(stack.pop());
+    }
+    assert(stack.empty());
+}
+
+void testStackClear() {
+    Stack<int> stack;
+    for (int i = 0; i < 50; ++i) {
+        stack.push(i);
+    }
+    assert(stack.size() == 50);
+
+    stack.clear();
+    assert(stack.empty());
+    assert(stack.size() == 0);
+
+    stack.push(7);
+    assert(stack.size() == 1);
+}
+
+void testStackWithActionRecords() {
+    // 撤销栈：最近一次操作在栈顶，撤销时先弹出
+    Stack<ActionRecord> actions;
+    actions.push(ActionRecord{1, 101});
+    actions.push(ActionRecord{1, 102});
+    actions.push(ActionRecord{2, 101});
+    assert(actions.size() == 3);
+
+    ActionRecord last{0, 0};  // 仅作接收容器
+    assert(actions.top(last));
+    assert(last.type == 2);
+    assert(last.reservationId == 101);
+    assert(actions.pop());
+
+    assert(actions.top(last));
+    assert(last.type == 1);
+    assert(last.reservationId == 102);
+    assert(actions.size() == 2);
+}
+
 int main() {
     testHashTableBasic();
     testHashTableDuplicateKey();
@@ -367,6 +455,11 @@ int main() {
     testQueueReuse();
     testQueueClear();
     testQueueWithReservations();
+
+    testStackBasic();
+    testStackGrow();
+    testStackClear();
+    testStackWithActionRecords();
 
     std::cout << "test_datastruct: all passed" << std::endl;
     return 0;
