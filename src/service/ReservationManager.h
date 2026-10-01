@@ -144,6 +144,26 @@ public:
         return conflictsWithExisting(deviceId, startTime, endTime);
     }
 
+    // 载入数据文件：按文件中记录的编号与状态原样写回，等待任务的排队次序随后由 enqueueWaiting 恢复
+    bool restore(const Reservation &reservation) {
+        if (reservation.getId() <= 0) return false;
+        if (!reservation.isValidTimeRange()) return false;
+        if (reservations.contains(reservation.getId())) return false;
+
+        reservations.insert(reservation.getId(), reservation);
+        if (reservation.getId() >= nextId) nextId = reservation.getId() + 1;
+        return true;
+    }
+
+    // 载入数据文件：按文件中的先后次序把等待任务重新排入队列
+    void enqueueWaiting(int reservationId) {
+        Reservation reservation(0, 0, 0, 0, 0);  // 仅作接收容器
+        if (!reservations.find(reservationId, reservation)) return;
+        if (reservation.getStatus() != ReservationStatus::Waiting) return;
+
+        waitingOrder.push(reservationId);
+    }
+
     bool findReservation(int reservationId, Reservation &out) const {
         return reservations.find(reservationId, out);
     }

@@ -55,9 +55,40 @@ public:
         return deviceManager;
     }
 
+    const UserManager &users() const {
+        return userManager;
+    }
+
+    const DeviceManager &devices() const {
+        return deviceManager;
+    }
+
     // 预约只通过下面的流程方法修改，因此对外只提供只读访问
     const ReservationManager &reservations() const {
         return reservationManager;
+    }
+
+    // 载入数据文件：按文件中记录的编号与状态原样恢复，不做日常业务校验
+    // 文件由本程序写出，格式错误的记录在读取阶段已被丢弃
+    bool restoreReservation(const Reservation &reservation) {
+        return reservationManager.restore(reservation);
+    }
+
+    void restoreWaitingOrder(int reservationId) {
+        reservationManager.enqueueWaiting(reservationId);
+    }
+
+    void restoreBorrowRecord(const BorrowRecord &record) {
+        if (record.getId() <= 0) return;
+
+        bool duplicated = false;
+        borrowHistory.forEach([&duplicated, &record](const BorrowRecord &existing) {
+            if (existing.getId() == record.getId()) duplicated = true;
+        });
+        if (duplicated) return;
+
+        if (record.getId() >= nextBorrowRecordId) nextBorrowRecordId = record.getId() + 1;
+        borrowHistory.pushBack(record);
     }
 
     // 用户还有有效预约或未归还的设备时不允许删除

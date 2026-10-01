@@ -96,6 +96,28 @@ public:
         return OpResult::Ok;
     }
 
+    // 载入数据文件：按文件中记录的编号与状态原样写回，不重新分配编号
+    bool restore(const Device &device) {
+        if (device.getId() <= 0 || device.getName().empty()) return false;
+        if (device.getCategory().empty() || device.getLocation().empty()) return false;
+        if (devices.contains(device.getId())) return false;
+
+        devices.insert(device.getId(), device);
+        if (device.getId() >= nextId) nextId = device.getId() + 1;
+        return true;
+    }
+
+    // 载入分类树：文件按下标顺序保存，父节点下标一定小于子节点，因此能一次遍历重建整棵树
+    // 成功返回新节点下标，父节点缺失或同级重名返回 -1
+    int restoreCategory(int parentId, const std::string &name) {
+        if (name.empty()) return -1;
+        if (parentId < -1 || parentId >= categories.size()) return -1;
+        if (categoryNameExists(parentId, name)) return -1;
+
+        if (parentId == -1) return categories.addRoot(name);
+        return categories.addChild(parentId, name);
+    }
+
     bool findDevice(int deviceId, Device &out) const {
         return devices.find(deviceId, out);
     }
@@ -141,6 +163,16 @@ public:
 
     int categoryCount() const {
         return categories.size();
+    }
+
+    // 按节点下标顺序输出分类，供保存数据文件使用（下标顺序保证父节点先于子节点出现）
+    void forEachCategoryByIndex(const std::function<void(const std::string &, int, int)> &fn) const {
+        std::string name;
+        for (int nodeId = 0; nodeId < categories.size(); ++nodeId) {
+            if (!categories.valueAt(nodeId, name)) continue;
+
+            fn(name, nodeId, categories.parentOf(nodeId));
+        }
     }
 
     // 前序输出分类，fn 参数依次为分类名、节点下标、父节点下标（顶层分类的父下标为 -1）

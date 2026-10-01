@@ -54,6 +54,17 @@ public:
         return OpResult::Ok;
     }
 
+    // 载入数据文件：按文件中记录的编号原样写回，并把编号计数推进到安全位置
+    // 与 addUser 的区别是不重新分配编号，因此不做重名校验，只拒绝非法与重复编号
+    bool restore(const User &user) {
+        if (user.getId() <= 0 || user.getName().empty() || user.getDepartment().empty()) return false;
+        if (users.contains(user.getId())) return false;
+
+        users.insert(user.getId(), user);
+        if (user.getId() >= nextId) nextId = user.getId() + 1;
+        return true;
+    }
+
     bool findUser(int userId, User &out) const {
         return users.find(userId, out);
     }
