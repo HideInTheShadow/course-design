@@ -84,6 +84,18 @@ public:
         return true;
     }
 
+    // 修改已存在键的值，键不存在返回 false
+    bool update(const K &key, const V &value) {
+        unsigned int index = hashKey(key);
+        for (Node *cur = buckets[index]; cur; cur = cur->next) {
+            if (cur->key == key) {
+                cur->value = value;
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool find(const K &key, V &out) const {
         unsigned int index = hashKey(key);
         for (Node *cur = buckets[index]; cur; cur = cur->next) {

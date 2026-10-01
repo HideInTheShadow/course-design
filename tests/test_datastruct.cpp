@@ -74,6 +74,31 @@ void testHashTableRemove() {
     assert(table.find(100, value) && value == 1000);
 }
 
+void testHashTableUpdate() {
+    HashTable<int, std::string> table;
+    table.insert(1, "old");
+
+    assert(table.update(1, "new"));
+    assert(table.size() == 1);
+
+    std::string value;
+    assert(table.find(1, value));
+    assert(value == "new");
+
+    // 键不存在时不新增
+    assert(!table.update(2, "x"));
+    assert(table.size() == 1);
+
+    // 更新模型对象
+    HashTable<int, Device> devices;
+    devices.insert(101, Device(101, "示波器", "电子测量", "A301"));
+    assert(devices.update(101, Device(101, "示波器", "电子测量", "B502")));
+
+    Device probe(0, "", "", "");  // 仅作接收容器
+    assert(devices.find(101, probe));
+    assert(probe.getLocation() == "B502");
+}
+
 void testHashTableCollision() {
     // 桶数取 7，插入 100 个键必然产生大量冲突
     HashTable<int, int> table(7);
@@ -610,6 +635,7 @@ void testTreeClear() {
 int main() {
     testHashTableBasic();
     testHashTableDuplicateKey();
+    testHashTableUpdate();
     testHashTableRemove();
     testHashTableCollision();
     testHashTableStringKey();
