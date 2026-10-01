@@ -3,6 +3,7 @@
 #include <string>
 
 #include "service/DeviceManager.h"
+#include "service/ReservationManager.h"
 #include "service/UserManager.h"
 
 // 测试依赖 assert，必须使用 Debug 构建（Release 下 NDEBUG 会禁用检查）
@@ -298,6 +299,109 @@ void testForEachDeviceAndCategory() {
     assert(names[2] == "机械加工" && parents[2] == -1);
 }
 
+void testSubmitReservation() {
+    ReservationManager manager;
+    assert(manager.reservationCount() == 0);
+
+    int first = 0;
+    int second = 0;
+    assert(manager.submitReservation(1, 101, 600, 720, first) == OpResult::Ok);
+    assert(manager.submitReservation(2, 101, 720, 840, second) == OpResult::Ok);
+    assert(first == 1);
+    assert(second == 2);
+    assert(manager.reservationCount() == 2);
+
+    Reservation reservation(0, 0, 0, 0, 0);  // 仅作接收容器
+    assert(manager.findReservation(first, reservation));
+    assert(reservation.getUserId() == 1);
+    assert(reservation.getDeviceId() == 101);
+    assert(reservation.getStartTime() == 600);
+    assert(reservation.getEndTime() == 720);
+    assert(reservation.getStatus() == ReservationStatus::Active);
+
+    assert(manager.contains(first));
+    assert(!manager.contains(99));
+}
+
+void testReservationTimeValidation() {
+    ReservationManager manager;
+    int rejected = -1;
+    assert(manager.submitReservation(1, 101, 720, 600, rejected) == OpResult::InvalidInput);
+    assert(manager.submitReservation(1, 101, 600, 600, rejected) == OpResult::InvalidInput);
+    assert(manager.submitReservation(1, 101, -10, 600, rejected) == OpResult::InvalidInput);
+    assert(manager.reservationCount() == 0);
+}
+
+void testReservationConflict() {
+    ReservationManager manager;
+    int base = 0;
+    assert(manager.submitReservation(1, 101, 600, 720, base) == OpResult::Ok);
+
+    // 部分重叠、完全相同、完全包含、被包含都算冲突
+    int rejected = -1;
+    assert(manager.submitReservation(2, 101, 660, 780, rejected) == OpResult::TimeConflict);
+    assert(manager.submitReservation(2, 101, 600, 720, rejected) == OpResult::TimeConflict);
+    assert(manager.submitReservation(2, 101, 580, 740, rejected) == OpResult::TimeConflict);
+    assert(manager.submitReservation(2, 101, 620, 700, rejected) == OpResult::TimeConflict);
+
+    // 半开区间 [start, end)：首尾相接不算冲突
+    int before = 0;
+    int after = 0;
+    assert(manager.submitReservation(2, 101, 480, 600, before) == OpResult::Ok);
+    assert(manager.submitReservation(2, 101, 720, 840, after) == OpResult::Ok);
+
+    // 不同设备互不影响
+    int otherDevice = 0;
+    assert(manager.submitReservation(2, 102, 600, 720, otherDevice) == OpResult::Ok);
+    assert(manager.reservationCount() == 4);
+
+    assert(manager.hasConflict(101, 610, 620));
+    assert(!manager.hasConflict(101, 900, 960));
+    assert(manager.hasConflict(101, 700, 600));  // 非法区间直接视为冲突
+}
+
+void testCancelReservation() {
+    ReservationManager manager;
+    int first = 0;
+    int second = 0;
+    manager.submitReservation(1, 101, 600, 720, first);
+    manager.submitReservation(2, 101, 720, 840, second);
+
+    assert(manager.cancelReservation(first) == OpResult::Ok);
+    assert(manager.cancelReservation(first) == OpResult::InvalidState);  // 重复取消
+    assert(manager.cancelReservation(99) == OpResult::NotFound);
+
+    Reservation reservation(0, 0, 0, 0, 0);
+    assert(manager.findReservation(first, reservation));
+    assert(reservation.getStatus() == ReservationStatus::Cancelled);
+
+    // 取消后时段释放，可以重新预约
+    int again = 0;
+    assert(manager.submitReservation(3, 101, 600, 720, again) == OpResult::Ok);
+    assert(manager.reservationCount() == 3);
+}
+
+void testForEachReservationOfDevice() {
+    ReservationManager manager;
+    int id = 0;
+    manager.submitReservation(1, 101, 600, 720, id);
+    manager.submitReservation(2, 101, 720, 840, id);
+    manager.submitReservation(3, 102, 600, 720, id);
+
+    int deviceCount = 0;
+    manager.forEachReservationOfDevice(101, [&deviceCount](const Reservation &reservation) {
+        assert(reservation.getDeviceId() == 101);
+        ++deviceCount;
+    });
+    assert(deviceCount == 2);
+
+    int total = 0;
+    manager.forEachReservation([&total](const Reservation &) {
+        ++total;
+    });
+    assert(total == 3);
+}
+
 int main() {
     testAddUser();
     testFindUser();
@@ -312,6 +416,12 @@ int main() {
     testRemoveDevice();
     testRemoveCategory();
     testForEachDeviceAndCategory();
+
+    testSubmitReservation();
+    testReservationTimeValidation();
+    testReservationConflict();
+    testCancelReservation();
+    testForEachReservationOfDevice();
 
     std::cout << "test_service: all passed" << std::endl;
     return 0;
