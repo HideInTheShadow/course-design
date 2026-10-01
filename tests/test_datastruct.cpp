@@ -293,6 +293,23 @@ void testLinkedListWithBorrowRecords() {
     });
     assert(device101Count == 2);
 
+    // 就地标记某台设备的未归还记录
+    bool marked = false;
+    history.forEachMutable([&marked](BorrowRecord &record) {
+        if (marked) return;
+        if (record.getDeviceId() == 101 && !record.isReturned()) {
+            record.markReturned(760);
+            marked = true;
+        }
+    });
+    assert(marked);
+
+    int returnedCount = 0;
+    history.forEach([&returnedCount](const BorrowRecord &record) {
+        if (record.isReturned()) ++returnedCount;
+    });
+    assert(returnedCount == 1);
+
     // 移除一条未归还的记录
     assert(history.removeIf([](const BorrowRecord &record) {
         return !record.isReturned();

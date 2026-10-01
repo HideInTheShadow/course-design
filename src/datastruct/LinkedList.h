@@ -70,6 +70,13 @@ public:
         }
     }
 
+    // 允许就地修改元素，用于「归还时标记借用记录」这类更新
+    void forEachMutable(const std::function<void(T &)> &fn) {
+        for (Node *cur = head; cur; cur = cur->next) {
+            fn(cur->value);
+        }
+    }
+
     // 删除第一个满足条件的节点，空表或无匹配时返回 false
     bool removeIf(const std::function<bool(const T &)> &pred) {
         Node *prev = nullptr;
