@@ -4,8 +4,10 @@
 
 #include "datastruct/HashTable.h"
 #include "datastruct/LinkedList.h"
+#include "datastruct/Queue.h"
 #include "model/BorrowRecord.h"
 #include "model/Device.h"
+#include "model/Reservation.h"
 
 // 测试依赖 assert，必须使用 Debug 构建（Release 下 NDEBUG 会禁用检查）
 
@@ -265,6 +267,86 @@ void testLinkedListWithBorrowRecords() {
     assert(history.size() == 2);
 }
 
+void testQueueBasic() {
+    Queue<int> queue;
+
+    assert(queue.empty());
+    assert(queue.size() == 0);
+
+    int value = 0;
+    assert(!queue.front(value));
+    assert(!queue.pop());
+
+    for (int i = 1; i <= 5; ++i) {
+        queue.push(i);
+    }
+    assert(queue.size() == 5);
+
+    // 先进先出，front 不改变队列
+    assert(queue.front(value) && value == 1);
+    assert(queue.size() == 5);
+
+    for (int i = 1; i <= 5; ++i) {
+        assert(queue.front(value));
+        assert(value == i);
+        assert(queue.pop());
+    }
+    assert(queue.empty());
+    assert(!queue.pop());
+}
+
+void testQueueReuse() {
+    Queue<int> queue;
+
+    // 反复填满再清空，验证队空后 tail 指针正确复位
+    for (int round = 0; round < 3; ++round) {
+        for (int i = 0; i < 10; ++i) {
+            queue.push(i);
+        }
+        while (queue.pop()) {
+        }
+        assert(queue.empty());
+    }
+
+    queue.push(99);
+    int value = 0;
+    assert(queue.front(value) && value == 99);
+}
+
+void testQueueClear() {
+    Queue<int> queue;
+    for (int i = 0; i < 100; ++i) {
+        queue.push(i);
+    }
+    assert(queue.size() == 100);
+
+    queue.clear();
+    assert(queue.empty());
+    assert(queue.size() == 0);
+
+    queue.push(1);
+    assert(queue.size() == 1);
+}
+
+void testQueueWithReservations() {
+    // 等待队列场景：设备释放后按提交顺序依次处理
+    Queue<Reservation> waiting;
+    waiting.push(Reservation(1, 1, 101, 600, 720));
+    waiting.push(Reservation(2, 2, 101, 720, 840));
+    waiting.push(Reservation(3, 3, 101, 900, 960));
+    assert(waiting.size() == 3);
+
+    Reservation probe(0, 0, 0, 0, 0);  // 仅作接收容器
+    assert(waiting.front(probe));
+    assert(probe.getId() == 1);
+    assert(probe.getDeviceId() == 101);
+
+    assert(waiting.pop());
+    assert(waiting.front(probe));
+    assert(probe.getId() == 2);
+    assert(waiting.size() == 2);
+}
+
 int main() {
     testHashTableBasic();
     testHashTableDuplicateKey();
@@ -280,6 +362,11 @@ int main() {
     testLinkedListRemove();
     testLinkedListClear();
     testLinkedListWithBorrowRecords();
+
+    testQueueBasic();
+    testQueueReuse();
+    testQueueClear();
+    testQueueWithReservations();
 
     std::cout << "test_datastruct: all passed" << std::endl;
     return 0;
