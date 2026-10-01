@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 // 链式队列：head 端出队、tail 端入队，均为 O(1)
 template<typename T>
 class Queue {
@@ -61,6 +63,12 @@ public:
 
     int size() const {
         return count;
+    }
+
+    void forEach(const std::function<void(const T &)> &fn) const {
+        for (Node *cur = head; cur; cur = cur->next) {
+            fn(cur->value);
+        }
     }
 
     void clear() {

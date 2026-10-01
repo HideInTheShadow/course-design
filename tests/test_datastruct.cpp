@@ -361,6 +361,23 @@ void testQueueClear() {
     assert(queue.size() == 1);
 }
 
+void testQueueForEach() {
+    Queue<int> queue;
+    for (int i = 1; i <= 5; ++i) {
+        queue.push(i);
+    }
+
+    // forEach 按出队顺序遍历且不改变队列
+    int expected[] = {1, 2, 3, 4, 5};
+    int index = 0;
+    queue.forEach([&expected, &index](const int &value) {
+        assert(value == expected[index]);
+        ++index;
+    });
+    assert(index == 5);
+    assert(queue.size() == 5);
+}
+
 void testQueueWithReservations() {
     // 等待队列场景：设备释放后按提交顺序依次处理
     Queue<Reservation> waiting;
@@ -652,6 +669,7 @@ int main() {
     testQueueBasic();
     testQueueReuse();
     testQueueClear();
+    testQueueForEach();
     testQueueWithReservations();
 
     testStackBasic();
