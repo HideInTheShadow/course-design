@@ -251,6 +251,7 @@ LabService          持有上述三个管理器 + LinkedList<BorrowRecord> + Sta
 course-design/
 ├── CLAUDE.md
 ├── README.md
+├── 代码说明.md        面向阅读与答辩的代码解释、操作说明与演示流程
 ├── 模板.md
 ├── .gitignore
 ├── CMakeLists.txt
